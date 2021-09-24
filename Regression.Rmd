@@ -1,0 +1,245 @@
+---
+
+author:  Regression
+date: 06 May, 2021
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    
+---
+
+<br>
+
+In this task, The famous Boston dataset from the MASS package records the historical median house value (medv column, in 1000s USD) for 506 suburbs around Boston in the 1970s.
+
+<br>
+
+# Task
+
+<br>
+
+
+####  LOADING THE DATASET 
+```{r}
+# call install.packages("MASS") first (only once)
+library("MASS")
+head(Boston, 3)
+```
+<br>
+
+
+<br><br>
+
+#### 1. Fit a simple linear model of medv as a function of lstat.
+First loading packages,
+```{r echo=T, results='hide',error=FALSE,warning=FALSE,message=FALSE}
+f_linear <- lm(medv~lstat, data=Boston)
+```
+
+
+<br><br>
+
+#### 2. Fit a quadratic polynomial model (𝑎𝑋^2 + 𝑏𝑋 + 𝑐) for the same pair of vari- ables.
+```{r}
+f_quad <- lm(medv ~ poly(lstat, 2, raw=TRUE), data=Boston)
+
+```
+
+<br><br>
+
+#### 3. Fit a cubic polynomial model (𝑎𝑋^3 + 𝑏𝑋^2 + 𝑐𝑋 + 𝑑) for the same pair of variables.
+
+```{r}
+f_cubic <- lm(medv ~ poly(lstat, 3, raw=TRUE), data=Boston)
+```
+
+<br><br>
+
+#### 4. Draw the scatter plot of the two variables and add the fitted regression curves (all three on a single plot, use different colours).
+
+First,getting test values of `lstat` in `test` 
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+test <- seq(min(Boston$lstat, na.rm=TRUE),
+            max(Boston$lstat, na.rm=TRUE),
+            length.out=201)
+```
+now, getting desired output from our fitted models 
+```{r}
+yy_linear <- f_linear$coefficients[1] + f_linear$coefficients[2]*(test)
+yy_quad   <- f_quad$coefficients[1] + f_quad$coefficients[2]*(test) +      
+             f_quad$coefficients[3]*(test^2)
+
+yy_cubic  <- f_cubic$coefficients[1] + f_cubic$coefficients[2]*(test) +    
+             f_cubic$coefficients[3]*(test^2) + 
+             f_cubic$coefficients[4]*(test^3)
+```
+Finally, plotting 
+```{r}
+plot(medv~lstat,data=Boston, las=1,col=c(5,7),  lwd=1)
+lines(test, yy_linear, col=2, lwd=3)
+lines(test, yy_quad, col=3, lwd=3)
+lines(test, yy_cubic, col=4, lwd=3)
+legend(25, 45,legend=c("linear", "quad","cubic"), col=2:4, lty="solid")
+
+
+
+```
+
+<br><br>
+
+#### 5. Construct a multiple regression model for medv as a function of lstat, rm, and tax.
+```{r}
+f_mul <- lm(medv~lstat + rm + tax, data=Boston)
+```
+
+<Br><br>
+
+#### 6. Use for ward selection (with respect to the AIC criterion) to come up with a multiple regression model for medv as a function of other variables.
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE }
+model_full <- formula(model.frame(medv~., data=Boston))
+model_empty <- medv ~ 1
+
+step(f_mul, scope=model_full, direction="forward")
+```
+hence, we get our desired variables for best fitting model. With best fitting variables i.e `indus` and `age`. Also "none" gives lowest value of AIC too. 
+<br><br>
+
+#### 7. Use backward elimination (with respect to the AIC criterion) to construct a multiple regression model for medv as a function of other variables.
+
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+step(lm(model_full, data=Boston), scope=model_empty, direction="backward")
+```
+
+ 
+ <br><br>
+
+#### 8. Construct a multiple regression model for medv as a function of lstat, rm, and tax transformed in various ways. Apply logarithms, squares, exponen- tial (amongst others) functions on the variables and try to come up with the best model by trial and error (you can also use forward selection and/or back- ward elimination for this).
+
+Constructing medv as a function of lstat, rm, and tax transformed in various ways.
+```{r}
+f_mul <-   lm(medv~lstat + rm + tax, data=Boston)
+
+f_poly <-  lm(medv~ poly(lstat, 4, raw=TRUE) + poly(rm, 4, raw=TRUE) +
+           poly(tax, 4, raw=TRUE), data=Boston)
+
+f_log <-   lm(medv ~ log(lstat) + log(rm) + log(tax), data=Boston)
+f_squ <-   lm(medv ~ lstat^2 + rm^2 + tax^2, data=Boston)
+f_expo <-  lm(medv ~ exp(lstat) + rm + tax, data=Boston)
+
+model_empty <- formula(medv ~ 1) 
+
+x_full <- formula( medv ~  lstat+ rm + tax + poly(lstat, 3, raw=TRUE) +
+          poly(rm, 3, raw=TRUE) + poly(tax, 4, raw=TRUE) +
+          log(lstat) + log(rm) + log(tax) + lstat^2 + rm^2 + 
+          tax^2 + exp(lstat) + exp(rm) 
+           )
+```
+
+```{r}
+step(lm(medv~ 1, data=Boston,  na.action=na.exclude), scope=x_full,
+     direction="forward")
+
+```
+finally, applying `step`,  <br>
+"exp(lstat) + log(tax)" has lowest AIC, so these are best variables for this model . 
+
+
+<br>
+<br>  
+
+
+
+#### 9. Compute AIC, RMSE, MAE, and adjusted 𝑅2 of each model. Which model is the best with regards to each metric? Draw conclusions in your own words.
+
+```{r}
+# r square 
+r_squ <- data.frame(RSquare=" ", Linear=summary(f_linear)$adj.r.squared,  
+         Quad= summary(f_quad)$adj.r.squared,   
+         Cubic=summary(f_cubic)$adj.r.squared 
+            )
+
+#MAE
+MAE  <- data.frame(MAE=" ", Linear=mean(abs(f_linear$residuals)),
+        Quad=mean(abs(f_quad$residuals)),
+        Cubic= mean(abs(f_cubic$residuals))
+             )
+
+#RMSE
+RMSE <- data.frame(RMSE=" ",Linear=sqrt(mean(f_linear$residuals^2)),
+        Quad=sqrt(mean(f_quad$residuals^2)),
+        Cubic=sqrt(mean(f_cubic$residuals^2))
+             )
+
+#AIC
+AIC <-  data.frame(AIC=" ", linear=AIC(f_linear),
+        Quad= AIC(f_quad),
+        Cubic=AIC(f_cubic)
+            )
+```
+```{r}
+knitr::kable(r_squ) 
+knitr::kable(MAE)
+knitr::kable(RMSE)
+knitr::kable(AIC)
+```
+As, taking AIC in account, we can conclude that Cubic model is more precise and have more accurecy. 
+
+
+
+<br> <br> 
+
+#### 10. For each model, draw the plot of the residuals (𝑦̂ − 𝑦 ) as a function of the predicted outputs (𝑦̂ ). Describe these plots in your own words.
+```{r echo=T, results='hide',error=FALSE,warning=FALSE,message=FALSE}
+library(tidyverse)
+library(ggpubr)
+
+f_linear <- lm(medv~lstat, data=Boston)
+
+par(mfrow=c(2, 2))
+p1  <- ggplot(data=Boston,
+       mapping=aes(x=predict(f_linear), y= f_linear$residuals  ))  +
+       geom_point(col="red") + labs(title="Residuals vs predicted (Linear model)",   
+       x="predicted medv outputs",y="residuals")
+
+p2 <-ggplot(data=Boston,
+      mapping=aes(x=predict(f_quad), y= f_quad$residuals  ))  +    
+      geom_point(col="red") + labs(title="Residuals vs predicted(Quad model)",
+      x="predicted medv outputs",y="residuals")                            
+
+p3 <-ggplot(data=Boston,
+      mapping=aes(x=predict(f_cubic), y= f_cubic$residuals  ))  + 
+      geom_point(col="red") + labs(title="Residuals vs predicted(Cubic model)", 
+      x="predicted medv outputs",y="residuals")                            
+
+ggarrange(p1, p2, p3, ncol=2, nrow=2) 
+
+```
+The interpretation of a "residuals vs. predictor plot" is identical to that for a "residuals vs. fits plot." That is, a well-behaved plot will bounce randomly and form a roughly horizontal band around the residual = 0 line. And, no data points will stand out from the basic random pattern of the other residuals. <br> 
+if there is some non-random pattern to the plot, it indicates that it would be worthwhile adding the predictor to the model. <br>
+Linear model or Cubic  :The points on the plot show no pattern or trend, suggesting that there is no relationship between the residuals and medv.  <br>
+Quad model : well, it seems a negative slope pattern or trend , so "lstat" variable doing good in it. <br>
+
+
+<br> <br>
+
+#### 11. Predict the medv values for lstat of 0, 25, 50, and 75 using all the models. Compare and discuss the results. Which of the predictions seem trustwor- thy?
+
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+
+test <- data.frame( lstat=c(0,25,50,75))
+values <- data.frame( lstat=c(0,25,50,75), 
+                      linear_pred_medv =predict(f_linear,test),                                             Quad_pred_medv = predict(f_quad, test), 
+                      cubic_pred_medv = predict(f_cubic, test)  
+                      )
+knitr::kable(values)
+```
+
+<br>
+
+
+
+<br><br><br><br>
+
+
+
