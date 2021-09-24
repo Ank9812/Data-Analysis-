@@ -1,0 +1,195 @@
+---
+
+author:  Data Frame Wrangling
+
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    
+---
+
+<br>
+
+we will be working with data on air quality in Victoria in 2019 (the most recent available currently).
+
+<br>
+
+# Task
+
+<br>
+
+
+#### 1. LOADING THE DATASET 
+```{r}
+air_all <- read.csv("2019_All_sites_air_quality_hourly_avg_AIR-I-F-V-VH-O-S1-DB-M2-4-0.csv", comment.char="#")
+
+ head(air_all,3)
+
+```
+<br>
+
+
+<br><br><br>
+
+#### 2. Using an add-on package such as osmar and openstreetmap then ploting a map of Victoria with all the air monitoring stations clearly marked.
+First loading packages,
+```{r echo=T, results='hide',error=FALSE,warning=FALSE,message=FALSE}
+library(dplyr)
+library(tidyverse)
+library(osmdata)
+library(sf)
+library(ggmap)
+```
+Then, extracting longitude and latitudes to ~locations~ object.
+```{r}
+locations <- as_tibble(air_all %>%
+                      select(latitude,longitude))
+locations_sf <- st_as_sf(locations, coords = c( "longitude","latitude"), crs = 4326)
+
+
+```
+after all, ploting all the co-ordintes with ~openstreetmap~
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+#our background map
+mad_map <- get_map(getbb("Melbourne"), maptype="satellite")
+
+#final map
+ggmap(mad_map)+
+  geom_sf(data=locations_sf,
+          inherit.aes =FALSE,
+          colour="#238443",
+          fill="#004529",
+          alpha=.5,
+          size=4,
+          shape=21)+
+  labs(x="",y="")
+
+```
+
+<br><br><br>
+
+#### 3. Creating a data frame named air that consists of air quality data for Gee- long South, Alphington, and Traralgon only. Omit all columns but sam- ple_datetime, sp_name, param_id, and value. Change the name of Geelong South to Geelong.
+```{r}
+air <- data.frame(air_all %>%
+                 select(sample_datetime, sp_name,param_id,value)  %>%
+                 filter(air_all$sp_name %in% c("Geelong South" ,"Alphington","Traralgon"))  
+                  
+                  )
+
+
+air$sp_name[which(air$sp_name=="Geelong South")] <- "Geelong"
+air %>% sample_n(3)
+```
+
+<br><br><br>
+
+#### 4. There are 11 air quality parameters : API , BPM2.5, CO, DBT ,NO2, O3, PM10, (in years, based on Year.Planted) of the trees of genera (each genus separately): Eucalyptus, Platanus, Ficus, Acer, and Quer- cus. Depict the sorted data with barplot().
+
+```{r}
+params <- c("BPM2.5", "PM10")
+```
+```{r}
+air2 <- air %>% filter(param_id %in% params)
+head(air2,14 )
+```
+
+<br><br><br>
+
+#### 5. Converting the data frame to the wide format so as to obtain:
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+air_wide <- spread(air2, key=c("param_id"), value="value") %>%
+        gather(Var, val, starts_with(params))  %>%
+          unite(Var1,Var, sp_name) %>% 
+      spread(Var1, val)
+head(air_wide,3)
+
+```
+
+<br><br><br>
+
+#### 6. Note that the sample_datetime column consists of ordinary strings. Using the strptime() function (see help("strptime")), convert it to proper date- time data.
+```{r}
+class(air_wide$sample_datetime)
+air_wide$sample_datetime <-strptime(air_wide$sample_datetime, format="%d/%m/%Y %H:%M")
+class(air_wide$sample_datetime)
+```
+
+<Br><br><br>
+
+#### 7. Computing the weekly averages of all the air quality parameters in each loca- tion. Missing values should be ignored.
+
+
+
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE }
+air_agg <- air_wide %>%
+    mutate(weeks= strftime(air_wide$sample_datetime, format = "%V")  ) %>%
+    
+      group_by(weeks) %>%
+    summarise_each(funs(mean(.,na.rm=TRUE)), colnames(air_wide)) %>%
+   select(-sample_datetime)  
+
+head(air_agg)
+```
+
+<br><br><br>
+
+#### 8. Drawing a separate **interactive plot** for each averaged air quality parameter (all locations on one plot). 
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+
+library(plotly)
+
+ plot_ly(data=air_agg,x = ~weeks, y = ~BPM2.5_Alphington, name='Alphingto',
+                         type = 'scatter', mode = 'lines',
+               line = list(color = 'blue', width = 1)) %>%
+    
+    add_trace(y = ~BPM2.5_Geelong, name = 'Geelong', 
+                         line = list(color = 'red', width = 1, dash = 'dot'))  %>%
+    add_trace(y = ~BPM2.5_Traralgon, name = 'Traralgon', 
+                         line = list(color = 'green', width = 1, dash = 'dash')) %>%
+
+    layout(title = "Plot for each averaged air quality parameter",
+         xaxis = list(title = "Weeks"),
+         yaxis = list (title = "BPM2.5"))
+ 
+ 
+ plot_ly(data=air_agg,x = ~weeks, y = ~PM10_Alphington, name='Alphingto',
+                         type = 'scatter', mode = 'lines',
+               line = list(color = 'blue', width = 1)) %>%
+    
+    add_trace(y = ~PM10_Geelong, name = 'Geelong', 
+                         line = list(color = 'red', width = 1, dash = 'dot'))  %>%
+    add_trace(y = ~PM10_Traralgon, name = 'Traralgon', 
+                         line = list(color = 'green', width = 1, dash = 'dash')) %>%
+
+    layout(title = "Plot for each averaged air quality parameter",
+         xaxis = list(title = "Weeks"),
+         yaxis = list (title = "PM10"))
+ 
+```
+
+ 
+ <br><br>
+
+#### 9. In your own words answer the following questions:
+
+<br>
+<br>  
+
+* What can be read from the above plot?  <br>
+**ANS:** Well, there are a lot of things to mention, these two upper graphs gives details of PM10 and BPM2.5 air parameter in three cities (i.e Alphington, geelong and Traralgon) and then how mean data of two parameter varies with each week.   <br><br>
+* How machine learning algorithms could help different government
+and other bodies predict the air quality?  <br>
+**ANS:** There are many machine learning algorithms which can really help to predict the air quality in a good manner, dependig of the structure of data we can use various models like regression, classification and many more.  <br><br>
+*  How would you quantify the degree to which the measurements in one
+location determine the air quality elsewhere?  <br>
+**ANS:** well after training and testing a model, it is worth to determine the air quality of elsewhere place if the model is most accurate. <br><br>
+* What can the general public do with this information ? <br>
+**ANS:** Yes,this type of data can give alot of such important to general public and can makes them aware about there surrounding air quality. 
+<br>
+
+
+
+
+
+
