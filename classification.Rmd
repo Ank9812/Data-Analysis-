@@ -1,0 +1,327 @@
+---
+
+author:  Classification
+date: 3 June, 2021
+output: 
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+    
+---
+
+
+<br>
+Is Artificial Intelligence a remedy for all our problems? <br>
+Let us consider the Wine Quality dataset, call:
+<br>
+There are 11 physico chemical features of wines reported (columns 1-11). Moreover, there is a wine rating (variable response) on the scale 0 (bad) to 10 (excellent) given by wine experts.
+
+# Task
+
+<br>
+
+
+#### 1. LOADING THE DATASET 
+```{r}
+wines <- read.csv("winequality-all.csv", comment.char="#") 
+head(wines, 3)
+
+```
+<br>
+
+
+<br><br><br>
+
+#### 2. Then,add a new 0/1 column named quality (quality equal to 1 if and only if a wine is ranked 6 or higher).
+<br>
+
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+wines$quality <- factor(as.character(as.numeric(wines$response>=6)), labels=c(1,2))
+wines <- wines[ , -c(12,13)]  ##removing "response"and "color" colmn  
+```
+<br>
+
+
+
+<br><br><br>
+
+#### 3. Perform a random train-test split of size 70-30%: create the matrices X_train and X_test and the corresponding label vectors Y_train and Y_test that pro- vide the information on the wines’ quality.
+<br>
+<br>
+ train-test split of size 70-30%, 
+```{r}
+library(caTools)
+
+set.seed(123)
+split = sample.split(wines, SplitRatio = 0.7)
+X_train = subset(wines, split == TRUE)
+Y_train <- subset(wines$quality, split == TRUE)
+
+X_test  = subset(wines, split == FALSE)
+Y_test <- subset(wines$quality, split == FALSE)
+```
+
+
+
+
+<br><br><br>
+
+#### 4. Your task will be to determine the best (see below) parameter setting for the K-nearest neighbour classification of the quality variable based on the 11 physicochemical features. Perform the so-called grid (exhaustive) search over all the possible combinations of the following parameters: 
+<br>
+a. K:1,3,5,7,9,11,13,15,17,or,19  <br>
+b. preprocessing : none (raw input data) or standardised variables
+<br>
+c. metric: 𝐿2 (Euclidean) or 𝐿1 (Manhattan) <br>
+
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+library("FNN")
+library(KernelKnn)
+library(caret)
+library( e1071)
+
+Ks<-c(1,3,5,7,9,11,13,15,17,19)
+Ps <- c("none", "standardised")
+Ms <- c("l2", "l1")
+c <-1
+## making a dataframe for our output results
+F <- data.frame(ks ="" ,ps="", Ms="",  Acc="", Prec="", Rec="", F_m="" ) 
+
+## and this fuction for accurecy and f-measure 
+  get_metrics <- function(Y_pred, x_test){
+   C <- table(Y_pred, x_test) # confusion matrix # 
+   stopifnot(dim(C) == c(2, 2))
+   c(Acc=(C[1,1]+C[2,2])/sum(C), # accuracy
+   Prec=C[2,2]/(C[2,2]+C[2,1]), # precision
+   Rec=C[2,2]/(C[2,2]+C[1,2]), # recall
+   F=C[2,2]/(C[2,2]+0.5*C[1,2]+0.5*C[2,1]), # F-measure # Confusion matrix items:
+   TN=C[1,1],
+   FN=C[1,2],
+   FP=C[2,1], TP=C[2,2])
+}
+```
+<br> hence the required loop for our desired result, with `cross-validation` in each. 
+```{r}
+for (K in Ks){
+  for (preprocessing in Ps){ 
+    for(metric in Ms) {
+      
+      ## when preprocessing is `standardised`
+      if (preprocessing == "standardised") {
+        # Feature Scaling
+        X_train1 <- X_train
+        X_test1 <- X_test        
+        X_train1[-12] = scale(X_train1[-12])
+        X_test1[-12] = scale(X_test1[-12])
+        
+                           ## when metric is `euclidean` 
+                           if (metric == "l1"){
+                             # Cross-validation with 5-fold
+                             folds = createFolds(X_train1$quality, k=5)
+                             cv = lapply(folds, function(x){
+                             training_fold = X_train1[-x,]
+                             test_fold = X_train1[x,]
+            
+                             Y_pred <- knn(training_fold[,-12],test_fold[,-12], training_fold[,12], k=5 )
+                             get_metrics(Y_pred, test_fold[,12])
+                             })  
+                             # now taking mean of each 5-fold for F-measure
+                             f<- (cv$Fold1 + cv$Fold2+cv$Fold3+cv$Fold4+cv$Fold5)/5
+                             # and storing all values in our output dataframe
+                             F[c,] <- data.frame(ks =K , ps= preprocessing, Ms=metric ,  Acc=f[1], Prec=f[2], Rec=f[3],F_m=f[4])
+                              c <- c+1 
+                              }
+        
+                         ## when metric is `manhattan`
+                         else {
+          
+                            folds = createFolds(X_train1$quality, k=5)
+                            cv = lapply(folds, function(x){
+                            training_fold = X_train1[-x,]
+                            test_fold = X_train1[x,]
+            
+                             y<-as.numeric(as.character(training_fold$quality))
+                             c2<-KernelKnn( training_fold[-12], TEST_data =test_fold[-12], y=  y, k = 5, h = 1, 
+                                            method = "manhattan",regression = FALSE,  Levels=unique(y))
+                             c2 <- data.frame(c2)           
+                             Y_pred<- as.numeric(c2$class_1>=0.5)
+                             get_metrics(Y_pred, test_fold[,12])    
+                            })
+          
+                            f<- (cv$Fold1 + cv$Fold2+cv$Fold3+cv$Fold4+cv$Fold5)/5
+                           F[c,] <- data.frame(ks =K , ps= preprocessing, Ms=metric , Acc=f[1], Prec=f[2], Rec=f[3],F_m=f[4])
+                            c <- c+1             
+                            }
+        } 
+      
+      
+      
+      
+      ## when `ps` is not stand.
+      else {                 
+                          ## when metric is `euclidean`
+                          if (metric == "l2"){
+          
+                            folds = createFolds(X_train$quality, k=5)
+                            cv = lapply(folds, function(x){
+                            training_fold = X_train[-x,]
+                            test_fold = X_train[x,]
+            
+                            Y_pred <- knn(training_fold[,-12],test_fold[,-12], training_fold[,12], k=5 )
+                            C <- table(Y_pred, test_fold[,12])
+                            get_metrics(Y_pred, test_fold[,12])
+                            })  
+                            f<- (cv$Fold1 + cv$Fold2+cv$Fold3+cv$Fold4+cv$Fold5)/5
+                            F[c,] <- data.frame(ks =K , ps= preprocessing, Ms=metric ,  Acc=f[1], Prec=f[2], Rec=f[3],F_m=f[4])
+                            c <- c+1 
+                          }
+        
+                      ## when metric is `manhattan`
+                      else {
+          
+                            folds = createFolds(X_train$quality, k=5)
+                            cv = lapply(folds, function(x){
+                            training_fold = X_train[-x,]
+                            test_fold = X_train[x,]
+            
+                            y<-as.numeric(as.character(training_fold$quality))
+                            c2<-KernelKnn( training_fold[-12], TEST_data =test_fold[-12], y=  y, k = 5, h = 1, 
+                                           method = "manhattan",regression = FALSE,  Levels=unique(y))
+                            c2 <- data.frame(c2)           
+                            Y_pred<- as.numeric(c2$class_1>=0.5)
+                            get_metrics(Y_pred, test_fold[,12])    
+                            })
+                            f<- (cv$Fold1 + cv$Fold2+cv$Fold3+cv$Fold4+cv$Fold5)/5
+                            F[c,] <- data.frame(ks =K , ps= preprocessing, Ms=metric , Acc=f[1], Prec=f[2], Rec=f[3],F_m=f[4])
+                            c <- c+1
+                            }
+       }
+      
+    }
+  }
+}
+
+
+
+
+
+```
+<br>
+Whereas,** this fuction is vesy slow to computing all these features **
+<br>
+
+Hence, result is 
+```{r}
+F
+```
+
+<br>
+So, 
+
+By the best classifier we mean the one that maximizes the `𝐹-measure` obtained by the so-called **5-fold cross-validation**  is
+
+```{r}
+knitr::kable(F[which(F$Acc==max(F$Acc)),])
+
+```
+<br> 
+And when `accurecy` is `max` with
+```{r}
+knitr::kable(F[which(F$F_m==max(F$F_m)),])
+```
+
+
+
+<br><br><br><br>
+
+#### 5.Report the best scenario (the one,out of 40,that maximises the F-measure computed via 5-fold cross-validation) together with the corresponding clas- sifier’s accuracy, precision, recall, and F-measure this time computed on the full test set.
+<br>
+As from the above result, we have best scenario (the one,out of 40,that maximises the F-measure computed via 5-fold cross-validation) is `ks= `,`Ps=  ` and `Ms= `. Hence getting other matrics with these variables. 
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+## getting whether its "standardised" or "none", and other things too
+ps<-F[which(F$F_m==max(F$F_m)),]
+ps
+```
+hence, doing feature scalling 
+```{r}
+X_train1 <- X_train
+X_test1 <- X_test     
+## Feature scaling 
+X_train1[-12] = scale(X_train1[-12])
+X_test1[-12] = scale(X_test1[-12])
+
+## getting k value for best scenario
+k <- F[which(F$F_m==max(F$F_m)),]$ks
+k
+```
+<br>
+
+finally, evaluating the model with best sinreio on `full test set`. 
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+Y_pred <- knn(X_train1[-12], X_test1[-12], Y_train, k=as.numeric(k)) 
+get_metrics(Y_pred, Y_test)
+```
+
+<br><br><br>
+
+#### 6. Similarly, compute the accuracy, precision, and recall via cross-validation. Draw the plots of the cross-validated accuracy, precision, recall, and F- measures as a function of 𝐾 for different preprocessing schemes and met- rics. How does the choice of the number of nearest neighbours affect the classification quality? Does standardisation help? Is the Manhattan metric better than the Euclidean one here?
+<br>
+As, we already calculated the accuracy, precision, and recall via cross-validation in upper big code, and object `F` store that values
+```{r}
+head(F,4)
+
+```
+<br> <br><br>
+Now, Drawing the plots of the cross-validated accuracy, precision, recall, and F- measures as a function of 𝐾 for different preprocessing schemes and met- rics.<br> 
+Plotting for "Manhattan" ` Ms==l1`
+```{r echo=T,error=FALSE,warning=FALSE,message=FALSE}
+ ## when metric os "l1"
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+## coverting `chr` to numeric
+F$Acc <- as.numeric(F$Acc)
+F$Prec <- as.numeric(F$Prec)
+F$Rec <- as.numeric(F$Rec)
+F$F_m <- as.numeric(F$F_m)
+## rounding off digits and filtering `Ms==l1`
+f1 <- F %>% mutate_at(vars(Acc,Prec, Rec, F_m), funs(round(., 2))) %>% filter(Ms=="l1") 
+## plotting 
+p1<-ggplot(f1, aes(ks, Acc, col=ps))   + geom_point(aes(shape=ps))+ theme(legend.position = "top")                
+p2<-ggplot(f1, aes(ks, Prec, col=ps))   + geom_point(aes(shape=ps))  + theme(legend.position = "top")    
+p3<-ggplot(f1, aes(ks, Rec, col=ps))   + geom_point(aes(shape=ps))    + theme(legend.position = "none")               
+p4<-ggplot(f1, aes(ks, F_m, col=ps))   + geom_point(aes(shape=ps))  + theme(legend.position = "none") 
+
+figure<- ggarrange( p1,p2,p3,p4, ncol=2,nrow=2)
+annotate_figure(figure,top = text_grob("With metric Manhattan", color = "red", face = "bold", size = 14))
+
+```
+<br><br><br><br>
+Plotting for "Euclidean" `Ms==l2`
+```{r}
+f1 <- F %>% mutate_at(vars(Acc,Prec, Rec, F_m), funs(round(., 2))) %>% filter(Ms=="l2") 
+
+p1<-ggplot(f1, aes(ks, Acc, col=ps))   + geom_point(aes(shape=ps))+ theme(legend.position = "top")                
+p2<-ggplot(f1, aes(ks, Prec, col=ps))   + geom_point(aes(shape=ps))  + theme(legend.position = "top")    
+p3<-ggplot(f1, aes(ks, Rec, col=ps))   + geom_point(aes(shape=ps))    + theme(legend.position = "none")               
+p4<-ggplot(f1, aes(ks, F_m, col=ps))   + geom_point(aes(shape=ps))  + theme(legend.position = "none") 
+figure<- ggarrange( p1,p2,p3,p4, ncol=2,nrow=2)
+annotate_figure(figure, top = text_grob("With metric Euclidean", color = "red", face = "bold", size = 14))
+```
+<br>
+<br>
+<br><br>
+<br>
+<br><br>
+Standard scaling, also known as standardization or Z-score normalization, consists of subtracting the mean and divide by the standard deviation. <br>
+While, The use of Manhattan distance depends a lot on the kind of co-ordinate system that your dataset is using. While Euclidean distance gives the shortest or minimum distance between two points, Manhattan has specific implementations.
+<br>
+*Also, you might want to consider Manhattan distance if the input variables are not similar in type (such as age, gender, height, etc.). Due to the curse of dimensionality, we know that Euclidean distance becomes a poor choice as the number of dimensions increases.*
+<br><br>
+So we can conclude that in regards with this dataset, **`Manhattan` performs quite better with `standardised`(feature scalling) dataset and with commonly `higher value of K` **, <br>
+Meanwhile, **`Ecclidean` performs  better with `no standardised`(no feature scaling) dataset and with commonly `lower value of K` **. 
+<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+
+<br>
+
+
+
